@@ -3,60 +3,57 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SMART App 授權啟動中...</title>
+    <title>SMART App 安全啟動中</title>
     <script src="https://cdn.jsdelivr.net/npm/fhirclient/build/fhir-client.js"></script>
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background-color: #f8f9fa; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }
-        .loading-box { text-align: center; background: white; padding: 2rem; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); max-width: 400px; }
-        .spinner { border: 4px solid #f3f3f3; border-top: 4px solid #007bff; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin: 0 auto 1rem; }
+        body { font-family: sans-serif; background: #f4f7f9; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }
+        .card { background: white; padding: 2.5rem; border-radius: 15px; box-shadow: 0 10px 25px rgba(0,0,0,0.05); text-align: center; max-width: 400px; }
+        .loader { border: 4px solid #f3f3f3; border-top: 4px solid #3498db; border-radius: 50%; width: 45px; height: 45px; animation: spin 1s linear infinite; margin: 0 auto 1.5rem; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        .error { color: #dc3545; display: none; }
+        .status-text { color: #2c3e50; font-weight: 600; font-size: 1.1rem; margin-bottom: 0.5rem; }
+        .sub-text { color: #7f8c8d; font-size: 0.9rem; }
     </style>
 </head>
 <body>
 
-<div class="loading-box">
-    <div id="loader">
-        <div class="spinner"></div>
-        <h3 style="margin: 0.5rem 0;">正在安全啟動</h3>
-        <p style="color: #6c757d; font-size: 0.9rem;">正在向 FHIR 伺服器申請訪問授權，請稍候...</p>
+<div class="card">
+    <div id="loading-state">
+        <div class="loader"></div>
+        <div class="status-text">正在安全啟動</div>
+        <div class="sub-text">連線至：<span id="server-url">...</span></div>
     </div>
-    <div id="error-msg" class="error">
-        <h3>啟動失敗</h3>
-        <p id="error-text">找不到啟動參數 (iss)，請從醫療系統或沙盒啟動此 App。</p>
-        <button onclick="location.reload()" style="padding: 5px 15px;">重試</button>
+    <div id="error-state" style="display:none; color: #e74c3c;">
+        <div style="font-size: 3rem; margin-bottom: 1rem;">⚠️</div>
+        <div class="status-text">啟動失敗</div>
+        <p id="error-msg">請確認您是從醫療系統或 FHIR 沙盒啟動此 App。</p>
     </div>
 </div>
 
 <script>
-    // 檢查網址是否有 iss 參數
-    const urlParams = new URLSearchParams(window.location.search);
-    const iss = urlParams.get("iss");
-
-    if (!iss) {
-        document.getElementById("loader").style.display = "none";
-        document.getElementById("error-msg").style.display = "block";
-    } else {
-        // 執行 SMART 授權流程
+    // 取得 ISS 參數並顯示在 UI 上
+    const params = new URLSearchParams(window.location.search);
+    const iss = params.get("iss");
+    
+    if (iss) {
+        document.getElementById("server-url").innerText = new URL(iss).hostname;
+        
         FHIR.oauth2.authorize({
-            // 比賽建議：使用動態 clientId 或保留測試用 ID
             "clientId": "my_measur_app", 
-            
-            // 權限範圍：包含病患資料讀取與啟動上下文
             "scope": "patient/*.read launch online_access openid fhirUser",
-            
-            // 務必與 GitHub Pages 設定的一致
-            "redirectUri": "index.html", 
-            
-            // 增強安全性：強制使用 PKCE (即使 Client 是 Public)
-            "pkceMode": "ifSupported"
+            "redirectUri": "index.html", // 跳轉至您的統計圖表頁
+            "pkceMode": "ifSupported" // 增加安全性
         }).catch(err => {
-            document.getElementById("loader").style.display = "none";
-            document.getElementById("error-msg").style.display = "block";
-            document.getElementById("error-text").innerText = "授權發生錯誤: " + err.message;
+            showError("授權失敗: " + err.message);
         });
+    } else {
+        showError("找不到 ISS 參數，無法建立 FHIR 連線。");
+    }
+
+    function showError(msg) {
+        document.getElementById("loading-state").style.display = "none";
+        document.getElementById("error-state").style.display = "block";
+        document.getElementById("error-msg").innerText = msg;
     }
 </script>
-
 </body>
 </html>
