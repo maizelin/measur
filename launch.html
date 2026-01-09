@@ -1,53 +1,62 @@
-import csv
-import random
-from datetime import datetime, timedelta
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SMART App 授權啟動中...</title>
+    <script src="https://cdn.jsdelivr.net/npm/fhirclient/build/fhir-client.js"></script>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background-color: #f8f9fa; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }
+        .loading-box { text-align: center; background: white; padding: 2rem; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); max-width: 400px; }
+        .spinner { border: 4px solid #f3f3f3; border-top: 4px solid #007bff; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin: 0 auto 1rem; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .error { color: #dc3545; display: none; }
+    </style>
+</head>
+<body>
 
-def generate_health_data():
-    file_name = 'health_data_3months.csv'
-    start_date = datetime(2023, 10, 1)
-    
-    header = ['日期 (Date)', '時間 (Time)', '紀錄類型 (Type)', '數值 1 (Value1)', '數值 2 (Value2)', '脈搏 (Pulse)', '備註 (Note)']
-    
-    data = []
-    
-    for day in range(90):
-        current_date = (start_date + timedelta(days=day)).strftime('%Y-%m-%d')
-        
-        # --- 早上記錄 (07:00 ~ 08:30) ---
-        m_time_bp = f"0{random.randint(7, 8)}:{random.randint(10, 59)}"
-        m_time_bg = f"0{random.randint(7, 8)}:{random.randint(10, 59)}"
-        
-        # 早上血壓 (模擬起床稍低)
-        sbp_m = random.randint(110, 125)
-        dbp_m = random.randint(70, 82)
-        pulse_m = random.randint(65, 75)
-        data.append([current_date, m_time_bp, '血壓', sbp_m, dbp_m, pulse_m, '起床後量測'])
-        
-        # 早上血糖 (模擬空腹)
-        glucose_m = random.randint(85, 105)
-        data.append([current_date, m_time_bg, '血糖', glucose_m, '', '', '空腹紀錄'])
-        
-        # --- 晚上記錄 (20:00 ~ 22:00) ---
-        e_time_bp = f"{random.randint(20, 21)}:{random.randint(10, 59)}"
-        e_time_bg = f"{random.randint(20, 21)}:{random.randint(10, 59)}"
-        
-        # 晚上血壓 (模擬疲勞稍微波動)
-        sbp_e = random.randint(120, 138)
-        dbp_e = random.randint(78, 88)
-        pulse_e = random.randint(72, 85)
-        data.append([current_date, e_time_bp, '血壓', sbp_e, dbp_e, pulse_e, '睡前量測'])
-        
-        # 晚上血糖 (模擬飯後)
-        glucose_e = random.randint(110, 145)
-        data.append([current_date, e_time_bg, '血糖', glucose_e, '', '', '晚飯後紀錄'])
+<div class="loading-box">
+    <div id="loader">
+        <div class="spinner"></div>
+        <h3 style="margin: 0.5rem 0;">正在安全啟動</h3>
+        <p style="color: #6c757d; font-size: 0.9rem;">正在向 FHIR 伺服器申請訪問授權，請稍候...</p>
+    </div>
+    <div id="error-msg" class="error">
+        <h3>啟動失敗</h3>
+        <p id="error-text">找不到啟動參數 (iss)，請從醫療系統或沙盒啟動此 App。</p>
+        <button onclick="location.reload()" style="padding: 5px 15px;">重試</button>
+    </div>
+</div>
 
-    # 寫入 CSV 檔案
-    with open(file_name, 'w', newline='', encoding='utf-8-sig') as f:
-        writer = csv.writer(f)
-        writer.writerow(header)
-        writer.writerows(data)
-    
-    print(f"成功生成 {len(data)} 筆紀錄，檔案已儲存為: {file_name}")
+<script>
+    // 檢查網址是否有 iss 參數
+    const urlParams = new URLSearchParams(window.location.search);
+    const iss = urlParams.get("iss");
 
-if __name__ == "__main__":
-    generate_health_data()
+    if (!iss) {
+        document.getElementById("loader").style.display = "none";
+        document.getElementById("error-msg").style.display = "block";
+    } else {
+        // 執行 SMART 授權流程
+        FHIR.oauth2.authorize({
+            // 比賽建議：使用動態 clientId 或保留測試用 ID
+            "clientId": "my_measur_app", 
+            
+            // 權限範圍：包含病患資料讀取與啟動上下文
+            "scope": "patient/*.read launch online_access openid fhirUser",
+            
+            // 務必與 GitHub Pages 設定的一致
+            "redirectUri": "index.html", 
+            
+            // 增強安全性：強制使用 PKCE (即使 Client 是 Public)
+            "pkceMode": "ifSupported"
+        }).catch(err => {
+            document.getElementById("loader").style.display = "none";
+            document.getElementById("error-msg").style.display = "block";
+            document.getElementById("error-text").innerText = "授權發生錯誤: " + err.message;
+        });
+    }
+</script>
+
+</body>
+</html>
