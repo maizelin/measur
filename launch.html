@@ -1,0 +1,53 @@
+import csv
+import random
+from datetime import datetime, timedelta
+
+def generate_health_data():
+    file_name = 'health_data_3months.csv'
+    start_date = datetime(2023, 10, 1)
+    
+    header = ['日期 (Date)', '時間 (Time)', '紀錄類型 (Type)', '數值 1 (Value1)', '數值 2 (Value2)', '脈搏 (Pulse)', '備註 (Note)']
+    
+    data = []
+    
+    for day in range(90):
+        current_date = (start_date + timedelta(days=day)).strftime('%Y-%m-%d')
+        
+        # --- 早上記錄 (07:00 ~ 08:30) ---
+        m_time_bp = f"0{random.randint(7, 8)}:{random.randint(10, 59)}"
+        m_time_bg = f"0{random.randint(7, 8)}:{random.randint(10, 59)}"
+        
+        # 早上血壓 (模擬起床稍低)
+        sbp_m = random.randint(110, 125)
+        dbp_m = random.randint(70, 82)
+        pulse_m = random.randint(65, 75)
+        data.append([current_date, m_time_bp, '血壓', sbp_m, dbp_m, pulse_m, '起床後量測'])
+        
+        # 早上血糖 (模擬空腹)
+        glucose_m = random.randint(85, 105)
+        data.append([current_date, m_time_bg, '血糖', glucose_m, '', '', '空腹紀錄'])
+        
+        # --- 晚上記錄 (20:00 ~ 22:00) ---
+        e_time_bp = f"{random.randint(20, 21)}:{random.randint(10, 59)}"
+        e_time_bg = f"{random.randint(20, 21)}:{random.randint(10, 59)}"
+        
+        # 晚上血壓 (模擬疲勞稍微波動)
+        sbp_e = random.randint(120, 138)
+        dbp_e = random.randint(78, 88)
+        pulse_e = random.randint(72, 85)
+        data.append([current_date, e_time_bp, '血壓', sbp_e, dbp_e, pulse_e, '睡前量測'])
+        
+        # 晚上血糖 (模擬飯後)
+        glucose_e = random.randint(110, 145)
+        data.append([current_date, e_time_bg, '血糖', glucose_e, '', '', '晚飯後紀錄'])
+
+    # 寫入 CSV 檔案
+    with open(file_name, 'w', newline='', encoding='utf-8-sig') as f:
+        writer = csv.writer(f)
+        writer.writerow(header)
+        writer.writerows(data)
+    
+    print(f"成功生成 {len(data)} 筆紀錄，檔案已儲存為: {file_name}")
+
+if __name__ == "__main__":
+    generate_health_data()

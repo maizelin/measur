@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SMART on FHIR 臨床生理監測平台</title>
+    <script src="https://cdn.jsdelivr.net/npm/fhirclient/build/fhir-client.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { font-family: "Microsoft JhengHei", Arial, sans-serif; background-color: #f4f7f6; margin: 20px; }
+        .container { max-width: 1000px; margin: auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        h1 { color: #2c3e50; text-align: center; }
+        .patient-info { background: #e9ecef; padding: 15px; border-radius: 5px; margin-bottom: 20px; }
+        .chart-container { margin-bottom: 40px; }
+        .status-msg { font-weight: bold; color: #007bff; text-align: center; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>跨越居家與診間：生理量測監測 App</h1>
+    
+    <div id="patient-info" class="patient-info">
+        正在載入病患資料...
+    </div>
+
+    <p id="status" class="status-msg">正在從 FHIR Server 抓取三個月數據...</p>
+
+    <div class="chart-container">
+        <canvas id="bpChart"></canvas>
+    </div>
+
+    <div class="chart-container">
+        <canvas id="bgChart"></canvas>
+    </div>
+</div>
+
+<script>
+    // 1. 初始化 SMART App 連線
+    FHIR.oauth2.ready().then(function(client) {
+        
+        // 抓取病患基本資料
+        client.patient.read().then(function(patient) {
+            const name = patient.name[0].given.join(" ") + " " + patient.name[0].family;
+            document.getElementById("patient-info").innerHTML = `
+                <strong>病患姓名：</strong> ${name} <br>
+                <strong>病患 ID：</strong> ${patient.id} <br>
+                <strong>查詢範圍：</strong> 近三個月生理趨勢 (Observation)
+            `;
+        });
+
+        // 2. 抓取生理量測數據 (Observation)
+        // 搜尋代碼：85354-9 (血壓), 2339-0 (血糖)
+        const query = new URLSearchParams();
+        query.set("patient", client.patient.id);
+        query.set("category", "vital-signs");
+        query.set("_count", "400"); // 抓取足夠筆數以涵蓋 360 筆紀錄
+        query.set("_sort", "date");
+
+        client.request("Observation?" + query.toString()).then(function(bundle) {
+            const bpData = { labels: [], sbp: [], dbp: [] };
+            const bgData = { labels: [], values: [] };
+
+            if (!bundle.entry || bundle.entry.length === 0) {
+                document.getElementById("status").innerText = "未找到相關量測數據。";
+                return;
+            }
+
+            bundle.entry.forEach(entry => {
+                const res = entry.resource;
+                const date = new Date(res.effectiveDateTime).toLocaleDateString();
+                const code = res.code.coding[0].code;
+
+                if (code === "85354-9") { // 血壓紀錄
+                    bpData.labels.push(date);
+                    const sbp = res.component.find(c => c.code.coding[0].code === "8480-6").valueQuantity.value;
+                    const dbp = res.component.find(c => c.code.coding[0].code === "8462-4").valueQuantity.value;
+                    bpData.sbp.push(sbp);
+                    bpData.dbp.push(dbp);
+                } else if (code === "2339-0") { // 血糖紀錄
+                    bgData.labels.push(date);
+                    bgData.values.push(res.valueQuantity.value);
+                }
+            });
+
+            document.getElementById("status").innerText = `成功載入 ${bundle.entry.length} 筆紀錄。`;
+            renderBPChart(bpData);
+            renderBGChart(bgData);
+        });
+
+    }).catch(function(error) {
+        console.error(error);
+        document.getElementById("status").innerText = "授權失敗或無法連線至 FHIR Server。";
+    });
+
+    // 3. 繪製血壓圖表
+    function renderBPChart(data) {
+        new Chart(document.getElementById('bpChart'), {
+            type: 'line',
+            data: {
+                labels: data.labels,
+                datasets: [
+                    { label: '收縮壓 (SBP)', data: data.sbp, borderColor: 'rgb(255, 99, 132)', tension: 0.1 },
+                    { label: '舒張壓 (DBP)', data: data.dbp, borderColor: 'rgb(54, 162, 235)', tension: 0.1 }
+                ]
+            },
+            options: { plugins: { title: { display: true, text: '三個月血壓趨勢' } } }
+        });
+    }
+
+    // 4. 繪製血糖圖表
+    function renderBGChart(data) {
+        new Chart(document.getElementById('bgChart'), {
+            type: 'bar',
+            data: {
+                labels: data.labels,
+                datasets: [{ label: '血糖 (mg/dL)', data: data.values, backgroundColor: 'rgba(75, 192, 192, 0.5)' }]
+            },
+            options: { plugins: { title: { display: true, text: '三個月血糖紀錄' } } }
+        });
+    }
+</script>
+
+</body>
+</html>
