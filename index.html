@@ -2,110 +2,132 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <title>SMART on FHIR 臨床生理監測平台 - 預載數據版</title>
+    <title>SMART on FHIR 臨床生理監測平台 - 統計版</title>
     <script src="https://cdn.jsdelivr.net/npm/fhirclient/build/fhir-client.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         body { font-family: "Microsoft JhengHei", sans-serif; background-color: #f0f2f5; margin: 20px; }
-        .container { max-width: 1000px; margin: auto; background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
-        .patient-card { background: #007bff; color: white; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
+        .container { max-width: 1100px; margin: auto; background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        .patient-card { background: #007bff; color: white; padding: 15px; border-radius: 8px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; }
+        
+        /* 統計面板樣式 */
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 25px; }
+        .stat-card { background: #fff; border: 1px solid #e0e0e0; padding: 15px; border-radius: 10px; text-align: center; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+        .stat-card h3 { margin: 0; font-size: 14px; color: #666; }
+        .stat-card .value { font-size: 24px; font-weight: bold; margin: 10px 0; color: #2c3e50; }
+        .stat-card .unit { font-size: 12px; color: #888; }
+        .danger { color: #e74c3c !important; }
+
         .chart-box { background: #fff; border: 1px solid #ddd; padding: 15px; border-radius: 8px; margin-bottom: 25px; }
-        h2 { border-left: 5px solid #007bff; padding-left: 10px; margin-bottom: 20px; }
+        h2 { border-left: 5px solid #007bff; padding-left: 10px; margin-bottom: 20px; font-size: 18px; }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <div class="patient-card" id="patient-info">載入中...</div>
+    <div class="patient-card">
+        <div id="patient-info">正在載入病患資料...</div>
+        <div style="font-size: 0.8em; opacity: 0.9;">數據範疇：2023-10-01 ~ 2023-12-31</div>
+    </div>
+
+    <div class="stats-grid" id="stats-panel">
+        <div class="stat-card">
+            <h3>平均血壓 (Avg BP)</h3>
+            <div class="value" id="avg-bp">-- / --</div>
+            <div class="unit">mmHg</div>
+        </div>
+        <div class="stat-card">
+            <h3>血壓異常率 (SBP > 140)</h3>
+            <div class="value danger" id="bp-warning">-- %</div>
+            <div class="unit">高血壓預警</div>
+        </div>
+        <div class="stat-card">
+            <h3>平均血糖 (Avg BG)</h3>
+            <div class="value" id="avg-bg">--</div>
+            <div class="unit">mg/dL</div>
+        </div>
+        <div class="stat-card">
+            <h3>血糖超標次數 (>130)</h3>
+            <div class="value danger" id="bg-count">--</div>
+            <div class="unit">次數 (三個月)</div>
+        </div>
+    </div>
     
     <div class="chart-box">
-        <h2>三個月血壓趨勢圖 (BP Trend)</h2>
+        <h2>三個月血壓趨勢動態監測</h2>
         <canvas id="bpChart"></canvas>
     </div>
 
     <div class="chart-box">
-        <h2>三個月血糖趨勢圖 (BG Trend)</h2>
+        <h2>三個月血糖量測分布</h2>
         <canvas id="bgChart"></canvas>
     </div>
 </div>
 
 <script>
-    // --- 1. 模擬 360 筆數據生成函數 ---
-    function generateMockData() {
+    function generateAndAnalyze() {
         const bp = { labels: [], sbp: [], dbp: [] };
         const bg = { labels: [], values: [] };
-        let startDate = new Date('2023-10-01');
+        let sumSbp = 0, sumDbp = 0, sumBg = 0;
+        let sbpWarningCount = 0, bgWarningCount = 0;
 
         for (let i = 0; i < 90; i++) {
-            let currentDate = new Date(startDate);
-            currentDate.setDate(startDate.getDate() + i);
-            let dateStr = currentDate.toISOString().split('T')[0];
-
-            // 早上量測
-            bp.labels.push(`${dateStr} (早)`);
-            bp.sbp.push(Math.floor(Math.random() * (125 - 110 + 1)) + 110);
-            bp.dbp.push(Math.floor(Math.random() * (82 - 70 + 1)) + 70);
+            const date = new Date(2023, 9, 1 + i).toISOString().split('T')[0];
             
-            bg.labels.push(`${dateStr} (早)`);
-            bg.values.push(Math.floor(Math.random() * (105 - 85 + 1)) + 85);
+            // 模擬早晚兩次數據
+            [7, 21].forEach(hour => {
+                const s = hour < 12 ? 110 + Math.random()*15 : 120 + Math.random()*20;
+                const d = hour < 12 ? 70 + Math.random()*12 : 78 + Math.random()*12;
+                const g = hour < 12 ? 85 + Math.random()*20 : 110 + Math.random()*35;
 
-            // 晚上量測
-            bp.labels.push(`${dateStr} (晚)`);
-            bp.sbp.push(Math.floor(Math.random() * (140 - 120 + 1)) + 120);
-            bp.dbp.push(Math.floor(Math.random() * (90 - 78 + 1)) + 78);
-            
-            bg.labels.push(`${dateStr} (晚)`);
-            bg.values.push(Math.floor(Math.random() * (145 - 110 + 1)) + 110);
+                bp.labels.push(`${date} ${hour}:00`);
+                bp.sbp.push(Math.round(s));
+                bp.dbp.push(Math.round(d));
+                bg.labels.push(`${date} ${hour}:00`);
+                bg.values.push(Math.round(g));
+
+                sumSbp += s; sumDbp += d; sumBg += g;
+                if (s > 140) sbpWarningCount++;
+                if (g > 130) bgWarningCount++;
+            });
         }
+
+        // 更新統計面板
+        const totalLogs = 180;
+        document.getElementById('avg-bp').innerText = `${Math.round(sumSbp/totalLogs)} / ${Math.round(sumDbp/totalLogs)}`;
+        document.getElementById('avg-bg').innerText = Math.round(sumBg/totalLogs);
+        document.getElementById('bp-warning').innerText = `${((sbpWarningCount/totalLogs)*100).toFixed(1)}%`;
+        document.getElementById('bg-count').innerText = bgWarningCount;
+
         return { bp, bg };
     }
 
-    // --- 2. 啟動 SMART App 並渲染圖表 ---
     FHIR.oauth2.ready().then(client => {
         client.patient.read().then(p => {
-            document.getElementById('patient-info').innerHTML = `
-                <strong>姓名：</strong> ${p.name[0].family}${p.name[0].given.join('')} | 
-                <strong>ID：</strong> ${p.id} | 
-                <strong>狀態：</strong> 已成功連接 FHIR Server 並載入歷史數據
-            `;
+            const name = p.name ? `${p.name[0].family}${p.name[0].given.join('')}` : "未知患者";
+            document.getElementById('patient-info').innerHTML = `<strong>病患：</strong> ${name} (${p.id})`;
         });
-
-        const mockData = generateMockData();
-        renderCharts(mockData);
+        renderCharts(generateAndAnalyze());
     }).catch(() => {
-        // 若非從 FHIR 啟動，仍顯示圖表供預覽
-        document.getElementById('patient-info').innerHTML = "<strong>預覽模式：</strong> 未連接 FHIR Server，顯示模擬量測數據。";
-        renderCharts(generateMockData());
+        document.getElementById('patient-info').innerHTML = "<strong>預覽模式：</strong> 謝金河 (DEMO-PATIENT-01)";
+        renderCharts(generateAndAnalyze());
     });
 
     function renderCharts(data) {
-        // 血壓圖
         new Chart(document.getElementById('bpChart'), {
             type: 'line',
             data: {
                 labels: data.bp.labels,
                 datasets: [
-                    { label: '收縮壓 (SBP)', data: data.bp.sbp, borderColor: '#e74c3c', backgroundColor: 'transparent', borderWidth: 2, pointRadius: 1 },
-                    { label: '舒張壓 (DBP)', data: data.bp.dbp, borderColor: '#3498db', backgroundColor: 'transparent', borderWidth: 2, pointRadius: 1 }
+                    { label: '收縮壓', data: data.bp.sbp, borderColor: '#e74c3c', pointRadius: 0, borderWidth: 1.5 },
+                    { label: '舒張壓', data: data.bp.dbp, borderColor: '#3498db', pointRadius: 0, borderWidth: 1.5 }
                 ]
             },
-            options: { responsive: true, scales: { y: { min: 60, max: 160 } } }
+            options: { scales: { x: { display: false } } }
         });
 
-        // 血糖圖
         new Chart(document.getElementById('bgChart'), {
             type: 'bar',
             data: {
                 labels: data.bg.labels,
                 datasets: [{
-                    label: '血糖值 (mg/dL)',
-                    data: data.bg.values,
-                    backgroundColor: data.bg.values.map(v => v > 130 ? '#f39c12' : '#2ecc71')
-                }]
-            }
-        });
-    }
-</script>
-
-</body>
-</html>
